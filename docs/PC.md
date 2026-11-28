@@ -92,7 +92,7 @@ Claude が Windows の PC を、画面を撮って押す（computer use）ので
 | pc_ui_do | 操作も可 | 部品を名前か id で探して click・set_value・toggle・expand・select など。位置で押す click_xy（`from_image` で画像の座標のまま） |
 | pc_keys | 操作も可 | 打つ（`text`、日本語は `paste: true` が確実）・特別なキー（`keys`：^s・%{F4}・{TAB} など）・`enter`。`window` を前に出せなければ打たない |
 | pc_try | 操作も可 | 箱で試す（Claude の作業場。pc-57〜）：ClaudeBox の中でファイル（`path`）か PowerShell の台本（`script`）を動かす。返事に終わりのコード・画面の文字・増えた／変わった（前 → 後）／消えたファイル。続けて run できる。`action`：run（既定。`args`・`seconds` 既定 60 最大 110・`offer`・`lines`）・show・offer（TRY の窓に出す）・discard。本物に入れるのは TRY の窓（カオル）だけ（下の「箱で試す」） |
-| hands | 見るだけ〜（undo は操作も可） | 作業のまとまり：start・done（DONE の報告）・log（TIMELINE）・undo（まとめて戻す）。下の「作業のまとまり」 |
+| hands | 見るだけ〜（undo・save は操作も可） | 作業のまとまり：start・done（DONE の報告）・log（TIMELINE）・undo（まとめて戻す）。下の「作業のまとまり」。**台本（RECIPE）**：recipes・recipe・save・run（下の「台本」） |
 | pc_trash | 操作も可 | 消す（完全には消さない）：**取り置き**（30 日）に写して中身が合うのを確かめてから、元を消す（ごみ箱は通さない。2026-11-28 から。C を 2 回使わないため）。取り置きに入らない大きいもの・C の空きが少ないときは止まる → カオルに聞いてから `recycle: true`（ごみ箱だけ）。消す前にカオルに確かめる決まり（下の「取り置き」） |
 
 ## ブラウザ（2026-11-26 から。browser_ で始まる道具）
@@ -137,7 +137,7 @@ Claude が Windows の PC を、画面を撮って押す（computer use）ので
 | --- | --- | --- |
 | browser_tabs | 見るだけ〜 | タブの一覧（id・★＝道具がいま使うタブ・＋＝Claude が開いたタブ）。`action`：new（url）・select・close |
 | browser_read | 見るだけ〜 | 押せる部品の一覧（`[番号] 役「名前」 = 値`・画面の外・押せない・パスワード欄の印）。`mode`：elements（既定）・text・all。`filter` で絞る。canvas・iframe があれば数を出す |
-| browser_do | 操作も可 | `steps` を順に：click（番号・`text=…`・`css=…`）・double・click_xy・type（ref・text・clear・enter）・select・key（Enter・Ctrl+A など）・scroll・wait・wait_for（文字か css）・goto・back・js。終わったら部品の一覧を返す（`read`：elements・text・all・none）。`front: true` でタブを前に出す（見えていないと止まるゲームなど） |
+| browser_do | 操作も可 | `steps` を順に：click（番号・`text=…`・`css=…`）・double・click_xy・type（ref・text・clear・enter）・select・key（Enter・Ctrl+A など）・scroll・wait・wait_for（文字か css）・goto・back・js。**分かれ道・繰り返し・確かめ**（pc-65 予定〜）：`if {text か css, wait, then:[手], else:[手]}`（いまページにあるか）・`repeat {times（50 まで）, until:{text か css}, steps:[手]}`（until にならなければ止まる）・`check {text か css, absent}`（あるはず・ないはずが違えば止まる。台本でページの形が変わったのに気づく）。中の手も同じ守り（E・許可）を通る。繰り返しを含めて 300 手まで。終わったら部品の一覧を返す（`read`：elements・text・all・none）。`front: true` でタブを前に出す（見えていないと止まるゲームなど） |
 | browser_js | 操作も可 | ページの中で JavaScript（コンソールと同じ書き方・await 可・最後の値を返す） |
 | browser_screenshot | 見るだけ〜 | 見えている所か部品 1 つ（`target`）を JPEG で。画像の座標 → click_xy の座標の換算が付く。文字で読めないときだけ |
 
@@ -198,9 +198,25 @@ Claude が Windows の PC を、画面を撮って押す（computer use）ので
 - ［STOP／止める］はカオルだけが押す（全部のスイッチをオフ）。Claude は LIVE の窓を押さない・閉じない
 - **STOP で、動いている処理も止まる**（pc-64〜。それまではスイッチがオフになっても、動いている台本は最大 10 分終わるまで動いた）：常駐役の見回り（2 秒ごと）が PC のオフを見つけると、動いている PC の道具を切る。PowerShell の台本は途中で止まり（常駐の PowerShell を起動し直す。台本の中で起動した別のプログラムは動いたままのことがある）、箱の中で動いているものも止める（箱の中身と試しの記録は残る）。ブラウザの道具はブラウザのスイッチで同じ
   - **止めないもの**（控え・戻しにかかわる短い処理。途中で切ると、元が消えたのに取り置きの記録が返らない・半分だけ入る、になる）：pc_trash・hands（まとめて戻す）・TRY の窓の［本物に入れる］［捨てる］。本物で変える台本（道 C）を止めたときも、後の確かめ（エラーなら決まったフォルダを控えに戻す）は最後までやる
-- 画面を撮ると右下に LIVE が写る（今は隠さない）
+- **Claude が画面を撮る（pc_screenshot）・位置で押す（pc_ui_do の click_xy など）間は、LIVE の窓を一瞬隠す**（pc-65 予定〜。前に出さず・フォーカスを取らずに戻す）。位置で押すときは、隠したあとの窓で「押してよい窓か」を確かめる（LIVE の下にあるものを押す。スイッチ・許可の窓は今までどおり押さない）
+- **DONE の報告に「箱で試したこと」も出る**（pc-65 予定〜）：作業の間に動きのあった試し（ClaudeBox）ごとに、動かした回数・増えた／変わった／消えた数・どうなったか（まだ試している・TRY の窓で返事待ち・本物に入れた・捨てた）。試しの控えは `devkit\hands\try\history`（新しい 100 件）
 - **DONE の窓**：`hands action=done` のあと、右下に報告が出る（3 分か［閉じる］で消える）。［まとめて戻す］はカオルが 2 回押す（Claude は押さない）。押すと常駐役に `hands undo` が届く（PC が「操作も可」のときだけ）
 - LIVE の exe だけを新しくするとき：Releases の pc-switch.zip から claude-hands-live.exe を取り、動いている claude-hands-live を止めて `devkit\hands` に写し、起動し直す（pc-setup.bat は要らない）
+
+## 台本（RECIPE。pc-65 予定〜）
+
+- くり返す作業は台本にして、`hands action=run` の 1 回の呼び出しで最後まで流す。Claude は途中で考えないので速く、トークンも少ない（LINK-DESIGN.md の 3・RESEARCH-DESIGN.md）
+- 保存：`hands action=save name=… about=（何をする台本か 1 行）params={言葉: 説明} steps=[{tool, args, note, show}, …]`。手の中の `{{言葉}}` を run の `values` で入れ替える。40 手まで。直して保存すると版が上がり、前の版は `devkit\hands\recipes\history` に残る
+- 流す：`hands action=run name=… values={…}`。返事は手ごとの結果と秒数、最後の手（と show: true の手）の返事
+- 一覧：`hands action=recipes`（流した回数・うまくいった回数・最後に止まった所）。中身：`hands action=recipe name=…`
+- 守り（台本を守りの抜け道にしない）：
+  - 手は 1 つずつ、ふつうの呼び出しと同じ道（スイッチ・道 A〜E・許可・E の止め）を通る。TIMELINE にも 1 手ずつ残る
+  - 許可（ALLOW）は使わない：許可が出ている間は流さない。許可が要る手に当たったら止まる
+  - 使えない手：hands（入れ子）・pc_trash（消す）・本物で変える台本（pc_powershell の real）・画面を撮る道具。pc_try は run・show だけ（変える台本は箱の中で動く）
+  - 失敗した手で止まる（前の手は済んでいる）。E（最後の一押し）もそこで止まる。止まった所は台本に残る
+  - 同時に 2 つは流さない。STOP で途中でも止まる。1 回 120 秒まで（リモートの道具は 140 秒で切れるため）
+  - 置き場所は PC の中（`devkit\hands\recipes`。個人の情報が入りうるので repo には入れない）
+- まだ無いもの（あとで）：iPhone の手・前の手の結果を次の手に渡す・WATCH（見張り）・記録から自動で台本を作る・似た台本を道具が自動で添える（操作研究）
 
 ## 取り置き（2026-11-27 から）
 
