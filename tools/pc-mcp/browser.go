@@ -75,7 +75,7 @@ type brDoIn struct {
 	whyArg
 	browserArg
 	Tab   string           `json:"tab,omitempty" jsonschema:"タブ（省くと最後に使ったタブか、いま見えているタブ）"`
-	Steps []map[string]any `json:"steps" jsonschema:"順にやる手。1 つずつ {\"click\": 12} のように書く。click（番号・\"text=文字\"・\"css=セレクタ\"）・double（同じ）・click_xy [x,y]（ページの見えている所の座標）・type {\"ref\":3,\"text\":\"…\",\"clear\":true,\"enter\":true}（ref を省くと今の欄）・select {\"ref\":5,\"value\":\"文字か値\"}・key \"Enter\"・\"Ctrl+A\"・scroll 600（下へ・負で上へ・\"top\"・\"bottom\"）・wait 500（ミリ秒・10000 まで）・wait_for \"文字\" か {\"text\":…,\"css\":…,\"timeout\":ms}・goto \"URL\"・back true・js \"式\"（最後の値を返す）"`
+	Steps []map[string]any `json:"steps" jsonschema:"順にやる手。1 つずつ {\"click\": 12} のように書く。click（番号・\"text=文字\"・\"css=セレクタ\"）・double（同じ）・click_xy [x,y]（ページの見えている所の座標）・type {\"ref\":3,\"text\":\"…\",\"clear\":true,\"enter\":true}（ref を省くと今の欄）・select {\"ref\":5,\"value\":\"文字か値\"}・key \"Enter\"・\"Ctrl+A\"・scroll 600（下へ・負で上へ・\"top\"・\"bottom\"）・wait 500（ミリ秒・10000 まで）・wait_for \"文字\" か {\"text\":…,\"css\":…,\"timeout\":ms}・goto \"URL\"・back true・js \"式\"（最後の値を返す）。分かれ道・繰り返し・確かめ：if {\"text\"か\"css\":…,\"wait\":ms,\"then\":[手…],\"else\":[手…]}（いまページにあるか）・repeat {\"times\":N（50 まで）,\"until\":{\"text\"か\"css\":…},\"steps\":[手…]}（until になるまで。ならなければ止まる）・check {\"text\"か\"css\":…,\"absent\":true}（あるはず・ないはずを確かめ、違えば止まる）。繰り返しを含めて手は 300 まで"`
 	Read  string           `json:"read,omitempty" jsonschema:"終わったあとに読む：elements（既定）・text・all・none"`
 	Front bool             `json:"front,omitempty" jsonschema:"true なら先にタブを前に出す（ゲームなど、見えていないと止まるページ）"`
 	Max   int              `json:"max,omitempty" jsonschema:"終わったあとの部品の数の上限（既定 120）"`
@@ -741,53 +741,212 @@ func (a *Agent) brDo(ctx context.Context, raw json.RawMessage) Reply {
 		_ = c.Call(ctx, "", "Target.activateTarget", map[string]any{"targetId": t.TargetID}, nil)
 		_ = c.Call(ctx, sid, "Page.bringToFront", nil, nil)
 	}
-	fail := func(i int, s string) Reply {
-		log = append(log, fmt.Sprintf("%d. ✗ %s", i+1, s))
-		log = append(log, "（ここで止めました。前の手は済んでいます）")
-		return Reply{Text: a.brDoTail(ctx, t, log, start, "none", 0), IsError: true}
+	r := &brRun{a: a, b: b, c: c, sid: sid, t: t}
+	if rep := r.run(ctx, in.Steps, ""); rep != nil {
+		rep.Text = a.brDoTail(ctx, r.t, r.log, start, "none", 0)
+		return *rep
 	}
-	for i, st := range in.Steps {
-		if i > 0 {
-			t = b.refresh(ctx, t)
-			if r := a.brCheckOperate(ctx, t); r != nil {
-				return fail(i, r.Text)
+	t, log = r.t, r.log
+	if in.Max <= 0 {
+		in.Max = 120
+	}
+	return okText(a.brDoTail(ctx, t, log, start, in.Read, in.Max))
+}
+
+// brRun：browser_do の手を順に動かす（if・repeat・check の中の手も同じ道を通る）
+type brRun struct {
+	a     *Agent
+	b     *Browser
+	c     *CDP
+	sid   string
+	t     targetInfo
+	log   []string
+	count int
+}
+
+const brMaxSteps = 300 // 繰り返しを含めた手の合計の上限（止まらない台本を作らない）
+
+func (r *brRun) fail(label, msg string, err error) *Reply {
+	r.log = append(r.log, fmt.Sprintf("%s ✗ %s", label, msg))
+	r.log = append(r.log, "（ここで止めました。前の手は済んでいます）")
+	rep := &Reply{IsError: true}
+	var na needAllowErr
+	if errors.As(err, &na) {
+		rep.What = na.what
+	}
+	var ee eErr
+	if errors.As(err, &ee) {
+		rep.Lane = "E"
+	}
+	return rep
+}
+
+func (r *brRun) run(ctx context.Context, steps []map[string]any, prefix string) *Reply {
+	for i, st := range steps {
+		label := fmt.Sprintf("%s%d.", prefix, i+1)
+		if r.count > 0 {
+			r.t = r.b.refresh(ctx, r.t)
+			if rep := r.a.brCheckOperate(ctx, r.t); rep != nil {
+				return r.fail(label, rep.Text, nil)
 			}
 		}
+		r.count++
+		if r.count > brMaxSteps {
+			return r.fail(label, fmt.Sprintf("手が %d を超えました（繰り返しの数を見直す）", brMaxSteps), nil)
+		}
 		if len(st) != 1 {
-			// 1 つの手に 1 つの動き（type などの中身は値の側に書く）
 			keys := make([]string, 0, len(st))
 			for k := range st {
 				keys = append(keys, k)
 			}
 			sort.Strings(keys)
-			return fail(i, "1 つの手には 1 つの動きだけ書いてください："+strings.Join(keys, ","))
+			return r.fail(label, "1 つの手には 1 つの動きだけ書いてください："+strings.Join(keys, ","), nil)
 		}
 		var kind string
 		var v any
 		for k, x := range st {
 			kind, v = strings.ToLower(k), x
 		}
-		cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		msg, err := a.brStep(cctx, c, sid, &t, kind, v)
-		cancel()
-		if err != nil {
-			r := fail(i, kind+" "+err.Error())
-			var na needAllowErr
-			if errors.As(err, &na) {
-				r.What = na.what
+		switch kind {
+		case "if":
+			m, _ := v.(map[string]any)
+			ok, what, err := r.cond(ctx, m)
+			if err != nil {
+				return r.fail(label, "if "+err.Error(), err)
 			}
-			var ee eErr
-			if errors.As(err, &ee) {
-				r.Lane = "E"
+			branch, word := "then", "ある"
+			if !ok {
+				branch, word = "else", "ない"
 			}
-			return r
+			sub, err := subSteps(m[branch])
+			if err != nil {
+				return r.fail(label, "if の "+branch+"："+err.Error(), err)
+			}
+			r.log = append(r.log, fmt.Sprintf("%s if 「%s」→ %s（%s の %d 手）", label, what, word, branch, len(sub)))
+			if rep := r.run(ctx, sub, label); rep != nil {
+				return rep
+			}
+		case "repeat":
+			m, _ := v.(map[string]any)
+			sub, err := subSteps(m["steps"])
+			if err != nil || len(sub) == 0 {
+				return r.fail(label, "repeat の steps（繰り返す手）が要ります", err)
+			}
+			times := 10.0
+			if f, ok := m["times"].(float64); ok {
+				times = f
+			}
+			times = math.Max(1, math.Min(times, 50))
+			until, _ := m["until"].(map[string]any)
+			if s, ok := m["until"].(string); ok {
+				until = map[string]any{"text": s}
+			}
+			met := false
+			n := 0
+			for ; n < int(times); n++ {
+				if until != nil {
+					ok, _, err := r.cond(ctx, until)
+					if err != nil {
+						return r.fail(label, "repeat の until "+err.Error(), err)
+					}
+					if ok {
+						met = true
+						break
+					}
+				}
+				if rep := r.run(ctx, sub, fmt.Sprintf("%s%d-", label, n+1)); rep != nil {
+					return rep
+				}
+			}
+			if until != nil && !met {
+				if ok, _, _ := r.cond(ctx, until); ok {
+					met = true
+				}
+			}
+			if until != nil && !met {
+				return r.fail(label, fmt.Sprintf("repeat：%d 回くり返しても「%s」になりませんでした", n, condWhat(until)), nil)
+			}
+			r.log = append(r.log, fmt.Sprintf("%s repeat %d 回%s", label, n, map[bool]string{true: "（" + condWhat(until) + " になった）", false: ""}[until != nil]))
+		case "check":
+			m, _ := v.(map[string]any)
+			if s, ok := v.(string); ok {
+				m = map[string]any{"text": s}
+			}
+			ok, what, err := r.cond(ctx, m)
+			if err != nil {
+				return r.fail(label, "check "+err.Error(), err)
+			}
+			absent, _ := m["absent"].(bool)
+			if ok == absent {
+				want := "ある"
+				if absent {
+					want = "ない"
+				}
+				return r.fail(label, fmt.Sprintf("check 「%s」が%sはずなのに違った（ページの形が変わったかもしれない）", what, want), nil)
+			}
+			r.log = append(r.log, fmt.Sprintf("%s check 「%s」→ OK", label, what))
+		default:
+			cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			msg, err := r.a.brStep(cctx, r.c, r.sid, &r.t, kind, v)
+			cancel()
+			if err != nil {
+				return r.fail(label, kind+" "+err.Error(), err)
+			}
+			r.log = append(r.log, label+" "+msg)
 		}
-		log = append(log, fmt.Sprintf("%d. %s", i+1, msg))
 	}
-	if in.Max <= 0 {
-		in.Max = 120
+	return nil
+}
+
+// cond：いまのページに文字・部品があるか（wait ミリ秒まで待ってよい。10 秒まで）
+func (r *brRun) cond(ctx context.Context, m map[string]any) (bool, string, error) {
+	text, _ := m["text"].(string)
+	css, _ := m["css"].(string)
+	if text == "" && css == "" {
+		return false, "", fmt.Errorf("は {\"text\":…} か {\"css\":…} で書く")
 	}
-	return okText(a.brDoTail(ctx, t, log, start, in.Read, in.Max))
+	wait, _ := m["wait"].(float64)
+	end := time.Now().Add(time.Duration(math.Max(0, math.Min(wait, 10000))) * time.Millisecond)
+	expr := fmt.Sprintf(`(()=>{const t=%s,c=%s; if(c&&document.querySelector(c)) return true; if(t&&document.body&&document.body.innerText.includes(t)) return true; return false;})()`, jsString(text), jsString(css))
+	for {
+		var ok bool
+		err := evalIn(ctx, r.c, r.sid, expr, &ok)
+		if err == nil && ok {
+			return true, condWhat(m), nil
+		}
+		if !time.Now().Before(end) || ctx.Err() != nil {
+			if err != nil {
+				return false, condWhat(m), err
+			}
+			return false, condWhat(m), nil
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+}
+
+func condWhat(m map[string]any) string {
+	text, _ := m["text"].(string)
+	css, _ := m["css"].(string)
+	if text != "" && css != "" {
+		return text + "／" + css
+	}
+	return text + css
+}
+
+// subSteps：if・repeat の中の手（JSON の配列）を手の並びにする
+func subSteps(v any) ([]map[string]any, error) {
+	if v == nil {
+		return nil, nil
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	var out []map[string]any
+	if err := json.Unmarshal(b, &out); err != nil {
+		return nil, fmt.Errorf("手の並び（[{…},{…}]）で書く")
+	}
+	return out, nil
 }
 
 func (a *Agent) brDoTail(ctx context.Context, t targetInfo, log []string, start time.Time, read string, max int) string {

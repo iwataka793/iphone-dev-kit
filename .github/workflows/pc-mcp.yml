@@ -4,7 +4,8 @@ name: pc-mcp build
 
 on:
   push:
-    branches: [main]
+    # stage/ のブランチは試験だけ（入れ直し用の pc-N は main だけが作る。release の段は main のときだけ）
+    branches: [main, "stage/**"]
     paths:
       - "tools/pc-mcp/**"
       - "tools/switch-app/**"

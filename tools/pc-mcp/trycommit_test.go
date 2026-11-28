@@ -138,6 +138,15 @@ func TestTryCommitOK(t *testing.T) {
 	if s, _ := loadTry(); s.Status != "applied" {
 		t.Errorf("状態 %s", s.Status)
 	}
+	// DONE の報告に「箱で試したこと」が出る（本物に入れた結果まで）
+	l := strings.Join(tryDoneLines(time.Now().Add(-time.Hour), time.Now().Add(time.Minute)), "\n")
+	if !strings.Contains(l, "c1") || !strings.Contains(l, "本物に入れた") || !strings.Contains(l, "入れた 2") {
+		t.Errorf("DONE に試しが出ない：%s", l)
+	}
+	// 試しのあとに始めた作業には出ない
+	if l := tryDoneLines(time.Now().Add(time.Hour), time.Now().Add(2*time.Hour)); len(l) != 0 {
+		t.Errorf("関係ない作業に試しが出た：%v", l)
+	}
 }
 
 // ①：窓に出したあとで箱の中身が変わったら（大きさが同じでも）入れない。もう一度押してもらう

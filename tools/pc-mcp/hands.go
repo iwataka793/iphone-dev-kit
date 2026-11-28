@@ -414,6 +414,9 @@ func (a *Agent) report(ctx context.Context, t *handsTask) string {
 	} else {
 		b.WriteString("変えたファイル：Git の記録なし\n")
 	}
+	for _, l := range tryDoneLines(t.Start, t.End) {
+		b.WriteString(l + "\n")
+	}
 	fmt.Fprintf(&b, "消したもの（取り置き。戻せる）：%d\n", len(held))
 	for _, h := range held {
 		fmt.Fprintf(&b, "  %s\n", h.From)

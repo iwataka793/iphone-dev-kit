@@ -101,7 +101,103 @@ func saveTry(s *tryState) error {
 	if err := os.WriteFile(tmp, b, 0o644); err != nil {
 		return err
 	}
+	saveTryHistory(s.ID, b)
 	return os.Rename(tmp, tryStateFile())
+}
+
+// 試しの控え（DONE の報告に「箱で試したこと」を出すため。新しい試しで current.json が上書きされても残る）
+func tryHistoryDir() string { return filepath.Join(tryDir(), "history") }
+
+const tryHistoryKeep = 100
+
+func saveTryHistory(id string, b []byte) {
+	if id == "" {
+		return
+	}
+	d := tryHistoryDir()
+	_ = os.MkdirAll(d, 0o755)
+	_ = os.WriteFile(filepath.Join(d, id+".json"), b, 0o644)
+	es, err := os.ReadDir(d)
+	if err != nil || len(es) <= tryHistoryKeep {
+		return
+	}
+	var names []string
+	for _, e := range es {
+		if strings.HasSuffix(e.Name(), ".json") {
+			names = append(names, e.Name())
+		}
+	}
+	sort.Strings(names) // 番号は時刻なので名前の順＝古い順
+	for _, n := range names[:len(names)-tryHistoryKeep] {
+		_ = os.Remove(filepath.Join(d, n))
+	}
+}
+
+// triesBetween：この間に動きのあった試し（古い順）
+func triesBetween(from, to time.Time) []*tryState {
+	es, err := os.ReadDir(tryHistoryDir())
+	if err != nil {
+		return nil
+	}
+	var out []*tryState
+	for _, e := range es {
+		b, err := os.ReadFile(filepath.Join(tryHistoryDir(), e.Name()))
+		if err != nil {
+			continue
+		}
+		var s tryState
+		if json.Unmarshal(b, &s) != nil || s.Started.After(to) {
+			continue
+		}
+		last := s.Started
+		if s.At.After(last) {
+			last = s.At
+		}
+		for _, r := range s.Runs {
+			if r.At.After(last) {
+				last = r.At
+			}
+		}
+		if last.Before(from) {
+			continue
+		}
+		out = append(out, &s)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
+}
+
+// tryDoneLines：DONE の報告に出す「箱で試したこと」
+func tryDoneLines(from, to time.Time) []string {
+	ts := triesBetween(from, to)
+	if len(ts) == 0 {
+		return nil
+	}
+	l := []string{fmt.Sprintf("箱で試したこと（ClaudeBox。本物は変わらない）：%d", len(ts))}
+	for _, s := range ts {
+		n := map[string]int{}
+		for _, it := range s.Items {
+			n[it.Kind]++
+		}
+		ok := 0
+		for _, r := range s.Runs {
+			if r.Exit != nil && *r.Exit == 0 {
+				ok++
+			}
+		}
+		st := map[string]string{
+			"working":   "まだ Claude が試している（カオルにはまだ見せていない）",
+			"waiting":   "TRY の窓でカオルの返事待ち",
+			"applied":   "本物に入れた（" + s.By + "）：" + s.Result,
+			"discarded": "捨てた（本物は何も変えていない）",
+		}[s.Status]
+		if st == "" {
+			st = s.Status
+		}
+		l = append(l, fmt.Sprintf("  %s：%d 回動かした（うまく終わった %d）・増えた %d・変わった %d・消えた %d → %s",
+			s.ID, len(s.Runs), ok, n["new"], n["changed"], n["deleted"], st))
+	}
+	return l
 }
 
 // ---- 署名（TRY の窓だけが「本物に入れる」を頼める） ----

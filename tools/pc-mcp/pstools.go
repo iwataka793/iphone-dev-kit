@@ -104,7 +104,9 @@ func (a *Agent) screenshot(ctx context.Context, raw json.RawMessage) Reply {
 		MaxWidth int    `json:"max_width"`
 	}
 	_ = json.Unmarshal(raw, &in)
+	restore := hideLive(150 * time.Millisecond) // LIVE の窓は撮った画面に写さない
 	out, err := a.ps.Run(ctx, uiScript("screenshot.ps1"), in, 60*time.Second)
+	restore()
 	if err != nil || strings.HasPrefix(strings.TrimSpace(out), "ERROR: ") {
 		return psReply(out, err)
 	}
@@ -445,6 +447,9 @@ func (a *Agent) uiDo(ctx context.Context, raw json.RawMessage) Reply {
 	if strings.HasSuffix(act, "_xy") {
 		x, _ := in["x"].(float64)
 		y, _ := in["y"].(float64)
+		// 位置で押す間は LIVE の窓を隠す（LIVE の下にあるものを押す。押せるかの確かめも、隠したあとの窓で）
+		restore := hideLive(60 * time.Millisecond)
+		defer restore()
 		if t := windowTitleAt(int(x), int(y)); handsWindowRe.MatchString(t) {
 			return errText("そこはカオルの窓（%s）です。スイッチ・許可・LIVE・DONE の窓は Claude からは押せません（押すのはカオルだけ）", t)
 		} else if isBoxWindow(t) {

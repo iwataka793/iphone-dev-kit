@@ -329,6 +329,15 @@ else:
         {"js": "document.getElementById('cvmsg').textContent + ' / ' + document.getElementById('far').textContent"}], "read": "none"}, False, "trusted=true")
     check("ページを移る・あとで出る文字を待つ・戻る", "browser_do", {"steps": [
         {"click": "text=次のページへ"}, {"click": "あとで出す"}, {"wait_for": "あとから出た"}, {"back": True}, {"js": "location.pathname"}], "read": "none"}, False, "index.html")
+    # 分かれ道・繰り返し・確かめ（台本で使う。道具は増やさない）
+    check("確かめ：あるはずの部品がある", "browser_do", {"steps": [{"check": {"text": "決める"}}], "read": "none"}, False, "→ OK")
+    check("確かめ：ないはずのものがあれば止まる", "browser_do", {"steps": [{"check": {"text": "決める", "absent": True}}, {"wait": 1}], "read": "none"}, True, "はずなのに違った")
+    check("分かれ道：無ければ else の手", "browser_do", {"steps": [{"if": {"text": "どこにも無い文字", "then": [{"js": "'then'"}], "else": [{"js": "'else-ran'"}]}}], "read": "none"}, False, "else-ran")
+    check("繰り返し：出るまで押す（2 回目で出る）", "browser_do", {"steps": [
+        {"js": "window.__n=0; document.title"},
+        {"repeat": {"times": 5, "until": {"css": "#rep2"}, "steps": [{"js": "window.__n++; if(window.__n>=2){const d=document.createElement('div'); d.id='rep2'; d.textContent='rep'; document.body.appendChild(d)} window.__n"}]}},
+        {"js": "window.__n"}], "read": "none"}, False, "repeat 2 回")
+    check("繰り返し：ならなければ止まる", "browser_do", {"steps": [{"repeat": {"times": 2, "until": "絶対に出ない文字", "steps": [{"wait": 10}]}}], "read": "none"}, True, "なりませんでした")
     check("JavaScript（await・最後の値）", "browser_js", {"code": "let a = 20; await new Promise(r => setTimeout(r, 50)); a + 1"}, False, "21")
     check("クッキーの JavaScript は許可が要る", "browser_js", {"code": "document.cookie"}, True, "許可")
     check("Chrome の設定には行かない", "browser_do", {"steps": [{"goto": "chrome://settings/passwords"}]}, True, "行きません")
@@ -338,6 +347,7 @@ else:
     check("許可があればログインのページも動かせる", "browser_do", {"steps": [
         {"goto": base + "/login.html"}, {"type": {"ref": "css=#u", "text": "user"}}, {"click": "次へ"}, {"wait_for": "押された"}], "read": "none"}, False, "出た")
     check("E：許可があっても「送る」は押さない", "browser_do", {"steps": [{"click": "送る"}], "read": "none"}, True, "E（")
+    check("E：分かれ道・繰り返しの中でも「送る」は押さない", "browser_do", {"steps": [{"if": {"text": "ログイン", "then": [{"repeat": {"times": 1, "steps": [{"click": "送る"}]}}], "else": [{"click": "送る"}]}}], "read": "none"}, True, "E（")
     # Claude 用の Chrome（道具が自分で起動する・ログインのページは許可があっても開かない）
     os.environ["PC_CHROME_EXE"] = chrome
     check("Claude 用の Chrome を起動してタブを開く", "browser_tabs", {"action": "new", "url": base + "/index.html", "profile": "claude"}, False, "試験のページ")
