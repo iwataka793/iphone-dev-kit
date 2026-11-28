@@ -11,6 +11,7 @@
   3. Claude が画面を撮る・位置で押す間は LIVE の窓を一瞬隠す（ASK-DESIGN.md の 3）
   4. browser_do に if（分かれ道）・repeat（繰り返し）・check（確かめ）。道具は増やさない
   5. 台本（RECIPE）を hands の action に：recipes・recipe・save・run（PC とブラウザの手だけ。PC.md の「台本」）
+- CI で見つけて直したこと：道具の入力の形に json.RawMessage を使うと、MCP の側の形（JSON Schema）が「数の並び」になって台本の steps を受け付けず、空の返事が返った（Go の試験は常駐役を直接呼ぶので気づかない）→ 手の並び（[]map[string]any）にした。Windows の通しの試験で、保存・流す・言葉の入れ替え・消す手を断る・失敗で止まる、まで OK（run 46171047640）
 - 作らなかったもの（PC・iPhone で先に確かめる決まり・カオルが決めること）：8 番の iPhone の部分（go-ios の Wi-Fi・クリップボードなど LINK-DESIGN の「PC で確かめること」）・iPhone の道具の整理（iphone_do）・WDA が家の Wi-Fi から届く件・全体の点検・17 番（守りと窓の作り直し。「作って」と言われてから）・PC の道具の整理（pc_do。使い方が変わるので、まとめて入れる前にカオルに案を見せてから）・ネットありで試したいときの決まり（カオルが決める）
 - **PC で確かめること（今の main＝pc-64 の確かめのあと、stage を main に入れて 1 回入れ替えてから）**：
   1. pc_screenshot を撮ると LIVE の窓が写らない・撮ったあと LIVE が元の場所に戻る（前に出ない・フォーカスを取らない）。LIVE の下にある部品を click_xy で押せる。スイッチ・許可の窓は今までどおり押さない
