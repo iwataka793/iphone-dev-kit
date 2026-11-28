@@ -338,6 +338,16 @@ else:
         {"repeat": {"times": 5, "until": {"css": "#rep2"}, "steps": [{"js": "window.__n++; if(window.__n>=2){const d=document.createElement('div'); d.id='rep2'; d.textContent='rep'; document.body.appendChild(d)} window.__n"}]}},
         {"js": "window.__n"}], "read": "none"}, False, "repeat 2 回")
     check("繰り返し：ならなければ止まる", "browser_do", {"steps": [{"repeat": {"times": 2, "until": "絶対に出ない文字", "steps": [{"wait": 10}]}}], "read": "none"}, True, "なりませんでした")
+    # 台本（RECIPE）：保存して 1 回の呼び出しで流す・言葉の入れ替え・失敗で止まる
+    check("台本を保存する", "hands", {"action": "save", "name": "試験の台本", "about": "試験のページを確かめて言葉を返す", "params": {"w": "返す言葉"},
+        "steps": [{"tool": "browser_do", "args": {"steps": [{"check": {"text": "決める"}}], "read": "none"}, "note": "ページを確かめる"},
+                  {"tool": "browser_js", "args": {"code": "'{{w}}' + '!'"}, "note": "言葉を返す"}]}, False, "新しく保存した")
+    check("台本を流す（言葉を入れ替える）", "hands", {"action": "run", "name": "試験の台本", "values": {"w": "やった"}}, False, "やった!")
+    check("台本の一覧", "hands", {"action": "recipes"}, False, "1 回流して 1 回うまくいった")
+    check("台本では消せない", "hands", {"action": "save", "name": "消す台本", "about": "x", "steps": [{"tool": "pc_trash", "args": {"paths": [str(tmp / "x")]}}]}, True, "台本では使えません")
+    check("台本は失敗した手で止まる", "hands", {"action": "save", "name": "止まる台本", "about": "x", "steps": [
+        {"tool": "browser_do", "args": {"steps": [{"check": {"text": "どこにも無い文字"}}], "read": "none"}}, {"tool": "browser_js", "args": {"code": "'動いてはいけない'"}}]}, False, "保存")
+    check("台本は失敗した手で止まる（流す）", "hands", {"action": "run", "name": "止まる台本"}, True, "1 手目で止まりました")
     check("JavaScript（await・最後の値）", "browser_js", {"code": "let a = 20; await new Promise(r => setTimeout(r, 50)); a + 1"}, False, "21")
     check("クッキーの JavaScript は許可が要る", "browser_js", {"code": "document.cookie"}, True, "許可")
     check("Chrome の設定には行かない", "browser_do", {"steps": [{"goto": "chrome://settings/passwords"}]}, True, "行きません")

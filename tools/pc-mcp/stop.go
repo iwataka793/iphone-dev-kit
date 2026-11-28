@@ -7,7 +7,7 @@ package main
 //     → PowerShell の台本は途中で止まる（常駐の PowerShell を起動し直す）。箱の中で動いているものも止める（中身は残る）
 //   - ブラウザの道具は、ブラウザのスイッチで同じようにする
 //   - 止めないもの：控え・戻しにかかわる短い処理（pc_trash＝取り置きへ写してから消す・hands＝まとめて戻す・
-//     カオルの TRY の窓の［本物に入れる］［捨てる］）。途中で切ると、元が消えたのに取り置きの記録が返らない、
+//     カオルの TRY の窓の［本物に入れる］［捨てる］。台本を流す hands action=run は止める）。途中で切ると、元が消えたのに取り置きの記録が返らない、
 //     半分だけ入る、などになるので最後まで終わらせる（どれも短い）
 //   - 「本物で」変える台本（道 C）を途中で止めたときも、後の確かめ（エラーなら決まったフォルダを控えに戻す）は切らずにやる
 
@@ -52,8 +52,15 @@ func (s *stopScope) set(on bool) bool {
 // keepRunning：STOP でも途中で切らない道具（控え・戻しにかかわる短い処理）
 func keepRunning(tool string, raw json.RawMessage) bool {
 	switch tool {
-	case "pc_trash", "hands":
+	case "pc_trash":
 		return true
+	case "hands":
+		// 台本を流す（run）は STOP で止める。ほか（start・done・undo など）は短いので最後まで
+		var in struct {
+			Action string `json:"action"`
+		}
+		_ = json.Unmarshal(raw, &in)
+		return strings.ToLower(in.Action) != "run"
 	case "pc_try":
 		var in struct {
 			Action string `json:"action"`

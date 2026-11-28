@@ -327,10 +327,15 @@ type tryIn struct {
 
 type handsIn struct {
 	whyArg
-	Action string `json:"action" jsonschema:"start（作業を始める。title が要る）／done（作業を終えて DONE の報告）／log（TIMELINE と作業の一覧。既定）／undo（task の作業で Claude が変えた・消した分を戻す。操作も可）"`
-	Title  string `json:"title,omitempty" jsonschema:"start の題名（何をする作業か。カオルが読んで分かる言葉で）"`
-	Task   string `json:"task,omitempty" jsonschema:"作業の番号（log・undo）"`
-	Max    int    `json:"max,omitempty" jsonschema:"log の行数（既定 40）"`
+	Action string            `json:"action" jsonschema:"start（作業を始める。title が要る）／done（作業を終えて DONE の報告）／log（TIMELINE と作業の一覧。既定）／undo（task の作業で Claude が変えた・消した分を戻す。操作も可）"`
+	Title  string            `json:"title,omitempty" jsonschema:"start の題名（何をする作業か。カオルが読んで分かる言葉で）"`
+	Task   string            `json:"task,omitempty" jsonschema:"作業の番号（log・undo）"`
+	Max    int               `json:"max,omitempty" jsonschema:"log の行数（既定 40）"`
+	Name   string            `json:"name,omitempty" jsonschema:"台本の名前（recipe・save・run。文字・数字・_・- で 40 文字まで）"`
+	About  string            `json:"about,omitempty" jsonschema:"save：何をする台本か（1 行。探すときに使う）"`
+	Params map[string]string `json:"params,omitempty" jsonschema:"save：入れ替える言葉 → 説明（手の中の {{名前}} を run の values で入れ替える）"`
+	Steps  json.RawMessage   `json:"steps,omitempty" jsonschema:"save：手の並び [{\"tool\":\"browser_do\",\"args\":{…},\"note\":\"何をするか\",\"show\":true}, …]（40 手まで。使える道具は読む・ブラウザ・箱・画面の部品。消す・本物で変える・画面を撮る・hands は使えない）"`
+	Values map[string]string `json:"values,omitempty" jsonschema:"run：params の言葉に入れる値"`
 }
 
 func runMCP() {
@@ -350,7 +355,7 @@ func runMCP() {
 	mcp.AddTool(s, &mcp.Tool{Name: "pc_keys", Description: "キーボードで打つ（文字・特別なキー・Enter）。window で先に窓を前に出せる。操作も可のときだけ"}, forward[keysIn]("pc_keys", 90*time.Second))
 	mcp.AddTool(s, &mcp.Tool{Name: "pc_trash", Description: "ファイル・フォルダを消す（完全には消さない）：取り置き（30 日。Claude には取り出せない・消せない。戻すのはカオル）に写して確かめてから、元を消す（ごみ箱は通さない。C を 2 回使わない）。取り置きに入らない大きいものは止まるので、カオルに聞いてから recycle: true。Windows 本体・パスワードなどの場所はカオルの許可が要る。消す前にカオルに確かめる決まり。操作も可のときだけ"}, forward[trashIn]("pc_trash", 6*time.Minute))
 	mcp.AddTool(s, &mcp.Tool{Name: "pc_try", Description: "箱で試す（Claude の作業場）：ClaudeBox（ネットは許可したサイトだけ・管理者なし・鍵などは見えない）の中で、ファイルか PowerShell の台本を動かす。本物の PC は何も変わらない。返事に、終わりのコード・画面の文字とエラー・増えた／変わった（前 → 後の行）／消えたファイルが出る。だめなら直して、もう一度 run（箱はそのまま続く）。本物に入れたいものができたら action=offer でカオルの TRY の窓に出す（本物に入れるかはカオルが決める。Claude からは入れられない）。試しだけなら action=discard。devkit\\downloads のもの（ネットから来たもの）は Defender で調べてから動かし、すぐ TRY の窓に出す。それらを箱の外で動かすのは止まるので、これを使う。操作も可のときだけ"}, forward[tryIn]("pc_try", 4*time.Minute))
-	mcp.AddTool(s, &mcp.Tool{Name: "hands", Description: "作業のまとまり：PC・ブラウザ・iPhone の操作を 1 本の記録（TIMELINE）に残し、作業ごとに区切る。PC やファイルを変える作業は、始める前に action=start（題名）、終わったら action=done（記録から「何を変えたか」の報告）。action=undo で、その作業で Claude が変えた文字のファイル（決まったフォルダ）と消したもの（取り置き）だけを戻す（あとで変わったものは戻さない）。action=log で最近の記録"}, forward[handsIn]("hands", 10*time.Minute))
+	mcp.AddTool(s, &mcp.Tool{Name: "hands", Description: "作業のまとまり：PC・ブラウザ・iPhone の操作を 1 本の記録（TIMELINE）に残し、作業ごとに区切る。PC やファイルを変える作業は、始める前に action=start（題名）、終わったら action=done（記録から「何を変えたか」の報告）。action=undo で、その作業で Claude が変えた文字のファイル（決まったフォルダ）と消したもの（取り置き）だけを戻す（あとで変わったものは戻さない）。action=log で最近の記録。台本（RECIPE）：action=recipes で一覧・recipe で中身・save で保存（直すと版が上がり前の版は残る）・run で 1 回の呼び出しで最後まで流す（Claude は途中で考えない。1 手ずつふつうと同じ守りを通る・許可は使わない・失敗や最後の一押しで止まる・120 秒まで）。くり返す作業は台本にする"}, forward[handsIn]("hands", 10*time.Minute))
 	// ブラウザ（カオルのいつもの Chrome。画面を撮らずに文字と番号で読んで動かす）
 	mcp.AddTool(s, &mcp.Tool{Name: "browser_tabs", Description: "Chrome のタブの一覧（番号・題名・URL）。action=new で URL を新しいタブで開く・select で前に出す・close で Claude が開いたタブを閉じる（一覧は見るだけで使える、ほかは操作も可）。ブラウザの道具は既定で Claude 用の Chrome（profile=claude。道具が起動する・カオルのログインは無い・ログインやお金のページは開かない）を使う。カオルのいつもの Chrome は、カオルに頼まれたときだけ profile=kaoru（初めてつなぐとき Chrome が「許可しますか？」を出す）"}, forward[brTabsIn]("browser_tabs", 2*time.Minute))
 	mcp.AddTool(s, &mcp.Tool{Name: "browser_read", Description: "Chrome のページを文字で読む（画像より速く正確）：押せる部品（ボタン・リンク・入力欄）に番号を付けた一覧と、ページの文字。filter で絞れる。番号は browser_do で使う。見るだけで使える"}, forward[brReadIn]("browser_read", 2*time.Minute))

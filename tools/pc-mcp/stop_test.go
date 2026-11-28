@@ -26,6 +26,10 @@ func TestStopScope(t *testing.T) {
 	defer c4()
 	br, c5 := a.callCtx(context.Background(), "browser_do", json.RawMessage(`{}`))
 	defer c5()
+	rr, c7 := a.callCtx(context.Background(), "hands", json.RawMessage(`{"action":"run","name":"x"}`))
+	defer c7()
+	hd, c8 := a.callCtx(context.Background(), "hands", json.RawMessage(`{"action":"undo"}`))
+	defer c8()
 	if a.pcStop.set(true) {
 		t.Fatal("オンのままなのに切った")
 	}
@@ -38,6 +42,9 @@ func TestStopScope(t *testing.T) {
 	}
 	if tr.Err() != nil || ap.Err() != nil {
 		t.Errorf("取り置き・本物に入れるのを途中で切った")
+	}
+	if !stoppedBySwitch(rr) || hd.Err() != nil {
+		t.Errorf("台本（hands run）は止まり、まとめて戻す（undo）は止まらないはず")
 	}
 	if br.Err() != nil {
 		t.Errorf("PC の STOP でブラウザまで切れた")

@@ -299,13 +299,26 @@ var stWord = map[string]string{"M": "変えた", "A": "作った", "D": "消し�
 
 func (a *Agent) hands(ctx context.Context, raw json.RawMessage) Reply {
 	var in struct {
-		Action string `json:"action"`
-		Title  string `json:"title"`
-		Task   string `json:"task"`
-		Max    int    `json:"max"`
+		Action string            `json:"action"`
+		Title  string            `json:"title"`
+		Task   string            `json:"task"`
+		Max    int               `json:"max"`
+		Name   string            `json:"name"`
+		About  string            `json:"about"`
+		Params map[string]string `json:"params"`
+		Steps  json.RawMessage   `json:"steps"`
+		Values map[string]string `json:"values"`
 	}
 	_ = json.Unmarshal(raw, &in)
 	switch in.Action {
+	case "recipes":
+		return a.recipeList()
+	case "recipe":
+		return a.recipeShow(in.Name)
+	case "save":
+		return a.recipeSave(in.Name, in.About, in.Params, in.Steps)
+	case "run":
+		return a.recipeRun(ctx, in.Name, in.Values)
 	case "start":
 		return a.handsStart(ctx, in.Title)
 	case "done":
@@ -318,7 +331,7 @@ func (a *Agent) hands(ctx context.Context, raw json.RawMessage) Reply {
 	case "", "status", "log":
 		return a.handsLog(in.Task, in.Max)
 	}
-	return errText("action は start（題名）・done・log・undo（task）のどれか")
+	return errText("action は start（題名）・done・log・undo（task）・recipes・recipe（name）・save（name・about・params・steps）・run（name・values）のどれか")
 }
 
 func (a *Agent) handsStart(ctx context.Context, title string) Reply {
