@@ -334,7 +334,7 @@ type handsIn struct {
 	Name   string            `json:"name,omitempty" jsonschema:"台本の名前（recipe・save・run。文字・数字・_・- で 40 文字まで）"`
 	About  string            `json:"about,omitempty" jsonschema:"save：何をする台本か（1 行。探すときに使う）"`
 	Params map[string]string `json:"params,omitempty" jsonschema:"save：入れ替える言葉 → 説明（手の中の {{名前}} を run の values で入れ替える）"`
-	Steps  json.RawMessage   `json:"steps,omitempty" jsonschema:"save：手の並び [{\"tool\":\"browser_do\",\"args\":{…},\"note\":\"何をするか\",\"show\":true}, …]（40 手まで。使える道具は読む・ブラウザ・箱・画面の部品。消す・本物で変える・画面を撮る・hands は使えない）"`
+	Steps  []map[string]any  `json:"steps,omitempty" jsonschema:"save：手の並び [{\"tool\":\"browser_do\",\"args\":{…},\"note\":\"何をするか\",\"show\":true}, …]（40 手まで。使える道具は読む・ブラウザ・箱・画面の部品。消す・本物で変える・画面を撮る・hands は使えない）"`
 	Values map[string]string `json:"values,omitempty" jsonschema:"run：params の言葉に入れる値"`
 }
 
